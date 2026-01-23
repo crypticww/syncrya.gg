@@ -1,4 +1,13 @@
+--[=[
+ d888b  db    db d888888b      .d888b.      db      db    db  .d8b.  
+88' Y8b 88    88   `88'        VP  `8D      88      88    88 d8' `8b 
+88      88    88    88            odD'      88      88    88 88ooo88 
+88  ooo 88    88    88          .88'        88      88    88 88~~~88 
+88. ~8~ 88b  d88   .88.        j88.         88booo. 88b  d88 88   88    @uniquadev
+ Y888P  ~Y8888P' Y888888P      888888D      Y88888P ~Y8888P' YP   YP  CONVERTER 
+]=]
 
+-- Instances: 149 | Scripts: 18 | Modules: 0 | Tags: 0
 local G2L = {};
 
 -- StarterGui.syncrya.gg
@@ -1589,50 +1598,208 @@ task.spawn(C_30);
 -- StarterGui.syncrya.gg.Background.tabContainer.tabCombat.SectionCamLock.SectionCamLockFolder.enableCamLock
 local function C_3b()
 local script = G2L["3b"];
-	local RunService = game:GetService("RunService")
-	local GuiService = game:GetService("GuiService")
+	-- services
 	local Players = game:GetService("Players")
-	local Camera = workspace.CurrentCamera
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local TweenService = game:GetService("TweenService")
+	local StarterGui = game:GetService("StarterGui")
 	
-	local player = Players.LocalPlayer
-	local Mouse = player:GetMouse()
+	-- folder
 	local folder = script.Parent
 	
-	local fovCircle
-	pcall(function()
-		fovCircle = Drawing.new("Circle")
-		fovCircle.Color = Color3.fromRGB(255, 255, 255)
-		fovCircle.Thickness = 2
-		fovCircle.NumSides = 64
-		fovCircle.Filled = false
-		fovCircle.Visible = true
-		fovCircle.Transparency = 1
+	-- player
+	local player = Players.LocalPlayer
+	local mouse = player:GetMouse()
+	local camera = workspace.CurrentCamera
+	
+	local toggle_key = Enum.KeyCode.Q
+	local smoothness
+	local max_distance
+	local wall_check
+	local knock_check
+	local knocked_hp = 20
+	local aimPartName
+	
+	local button_toggled = folder:WaitForChild("camLockEnabled").Value or false
+	local camlock_enabled = false
+	local current_target = nil
+	
+	local btn = script.Parent.Parent
+		:WaitForChild("FunctionsCamLock")
+		:WaitForChild("CamLock")
+		:WaitForChild("enableCamLock")
+	
+	local tween_info = TweenInfo.new(
+		0.5,
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.Out
+	)
+	local current_tween
+	
+	local function sendNotification(title, text, duration)
+		StarterGui:SetCore("SendNotification", {
+			Title = title,
+			Text = text,
+			Duration = duration or 3
+		})
+	end
+	
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.IgnoreWater = true
+	
+	local function update_button_color()
+		local target_color = button_toggled and Color3.fromRGB(79, 79, 79) or Color3.fromRGB(17, 17, 17)
+	
+		if current_tween then
+			current_tween:Cancel()
+		end
+	
+		current_tween = TweenService:Create(btn, tween_info, { BackgroundColor3 = target_color })
+		current_tween:Play()
+	end
+	
+	local function isVisible(character)
+		if not wall_check then return true end
+		if not character or not character:FindFirstChild(aimPartName) then return false end
+	
+		rayParams.FilterDescendantsInstances = { player.Character }
+		local camPos = camera.CFrame.Position
+		local partPos = character[aimPartName].Position
+		local direction = partPos - camPos
+	
+		local result = workspace:Raycast(camPos, direction, rayParams)
+		return result and result.Instance:IsDescendantOf(character)
+	end
+	
+	local function isValidHealth(humanoid)
+		if not humanoid or humanoid.Health <= 0 then return false end
+		if not knock_check then return true end
+		return humanoid.Health >= knocked_hp
+	end
+	
+	local function getClosestPlayerToMouse()
+		local closest_player = nil
+		local shortest_distance = math.huge
+	
+		local fovDegrees = 90
+		if folder:FindFirstChild("camLockFOV") then
+			local fovValue = folder.camLockFOV.Value
+			if fovValue and fovValue > 0 then
+				fovDegrees = fovValue
+			end
+		end
+	
+		local camPos = camera.CFrame.Position
+		local camLookVector = camera.CFrame.LookVector
+	
+		for _, otherPlayer in pairs(Players:GetPlayers()) do
+			if otherPlayer ~= player
+				and otherPlayer.Character
+				and otherPlayer.Character:FindFirstChild(aimPartName)
+				and otherPlayer.Character:FindFirstChild("Humanoid") then
+	
+				local humanoid = otherPlayer.Character.Humanoid
+	
+				if isValidHealth(humanoid) then
+					local part = otherPlayer.Character[aimPartName]
+	
+					local targetDirection = (part.Position - camPos).Unit
+					local dotProduct = camLookVector:Dot(targetDirection)
+					local angleInRadians = math.acos(math.clamp(dotProduct, -1, 1))
+					local angleInDegrees = math.deg(angleInRadians)
+	
+					if angleInDegrees <= fovDegrees / 2 then
+						local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+	
+						if onScreen then
+							local mousePos = Vector2.new(mouse.X, mouse.Y)
+							local screenPos2D = Vector2.new(screenPos.X, screenPos.Y)
+							local mouse_distance = (screenPos2D - mousePos).Magnitude
+	
+							if mouse_distance < shortest_distance then
+								if isVisible(otherPlayer.Character) then
+									closest_player = otherPlayer
+									shortest_distance = mouse_distance
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	
+		return closest_player
+	end
+	
+	btn.MouseButton1Click:Connect(function()
+		button_toggled = not button_toggled
+	
+		if not button_toggled then
+			camlock_enabled = false
+			current_target = nil
+		end
+	
+		update_button_color()
+	end)
+	
+	UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then return end
+		if not button_toggled then return end
+	
+		if input.KeyCode == toggle_key then
+			camlock_enabled = not camlock_enabled
+	
+			if camlock_enabled then
+				current_target = getClosestPlayerToMouse()
+				if current_target then
+					sendNotification("Locked", current_target.Name, 2)
+				else
+					sendNotification("Lock Failed", "No valid target found", 2)
+					camlock_enabled = false
+				end
+			else
+				if current_target then
+					sendNotification("Unlocked", current_target.Name, 2)
+				end
+				current_target = nil
+			end
+	
+			update_button_color()
+		end
 	end)
 	
 	RunService.RenderStepped:Connect(function()
-		if not fovCircle then return end
+		smoothness = folder:WaitForChild("camLockSmoothness").Value or 0
+		max_distance = folder:WaitForChild("camLockFOV").Value or 90
+		wall_check = folder:WaitForChild("camLockWallCheck").Value or false
+		knock_check = folder:WaitForChild("camLockKnockCheck").Value or false
+		aimPartName = folder:WaitForChild("camLockAimPart").Value or "Head"
 	
-		pcall(function()
-			local fovValue = folder:FindFirstChild("camLockFOV")
-			local fovCircleEnabled = folder:FindFirstChild("camLockFOVCircle")
-			local fovCircleTransparency = folder:FindFirstChild("camLockFOVCircleTransparency")
+		if not camlock_enabled then return end
 	
-			local fovDegrees = fovValue and fovValue.Value or 90
-			local enabled = fovCircleEnabled and fovCircleEnabled.Value or true
-			local transparency = fovCircleTransparency and fovCircleTransparency.Value or 1
+		if not current_target
+			or not current_target.Character
+			or not current_target.Character:FindFirstChild("Humanoid")
+			or not isValidHealth(current_target.Character.Humanoid)
+			or not isVisible(current_target.Character) then
 	
-			fovCircle.Visible = enabled
+			current_target = getClosestPlayerToMouse()
+			return
+		end
 	
-			if not enabled then return end
+		local targetPart = current_target.Character:FindFirstChild(aimPartName)
+		if not targetPart then return end
 	
-			local screenHeight = Camera.ViewportSize.Y
-			local radius = math.tan(math.rad(fovDegrees / 2)) * (screenHeight / (2 * math.tan(math.rad(Camera.FieldOfView / 2))))
+		local camPos = camera.CFrame.Position
+		local targetCF = CFrame.new(camPos, targetPart.Position)
 	
-			fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-			fovCircle.Radius = radius
-			fovCircle.Transparency = transparency
-		end)
+		local alpha = math.clamp(1 - smoothness, 0.05, 1)
+		camera.CFrame = camera.CFrame:Lerp(targetCF, alpha)
 	end)
+	
+	btn.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
 end;
 task.spawn(C_3b);
 -- StarterGui.syncrya.gg.Background.tabContainer.tabCombat.SectionCamLock.SectionCamLockFolder.fovCircle
@@ -1666,17 +1833,19 @@ local script = G2L["43"];
 			local fovCircleEnabled = folder:FindFirstChild("camLockFOVCircle")
 			local fovCircleTransparency = folder:FindFirstChild("camLockFOVCircleTransparency")
 	
-			local fov = fovValue and fovValue.Value or 90
-			local enabled = fovCircleEnabled and fovCircleEnabled.Value or true
+			local fovDegrees = fovValue and fovValue.Value or 90
+			local enabled = fovCircleEnabled and fovCircleEnabled.Value or false
 			local transparency = fovCircleTransparency and fovCircleTransparency.Value or 1
 	
 			fovCircle.Visible = enabled
 	
 			if not enabled then return end
 	
-			local guiInset = GuiService:GetGuiInset()
-			fovCircle.Position = Vector2.new(Mouse.X, Mouse.Y + guiInset.Y)
-			fovCircle.Radius = fov
+			local screenHeight = Camera.ViewportSize.Y
+			local radius = math.tan(math.rad(fovDegrees / 2)) * (screenHeight / (2 * math.tan(math.rad(Camera.FieldOfView / 2))))
+	
+			fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+			fovCircle.Radius = radius
 			fovCircle.Transparency = transparency
 		end)
 	end)
