@@ -4996,6 +4996,8 @@ local script = G2L["121"];
 		currentTween:Play()
 	end
 	
+	local inconsolataFont = Font.new([[rbxasset://fonts/families/Inconsolata.json]], Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+	
 	local function createNameTag(player)
 		if player == LocalPlayer then return end
 		local char = player.Character
@@ -5018,9 +5020,10 @@ local script = G2L["121"];
 		textLabel.Text = player.Name
 		textLabel.TextColor3 = Color3.new(1, 1, 1)
 		textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-		textLabel.TextStrokeTransparency = 0
-		textLabel.Font = Enum.Font.Inconsolata
+		textLabel.TextStrokeTransparency = transparency.Value
 		textLabel.TextScaled = true
+		textLabel.Font = Enum.Font.Custom
+		textLabel.FontFace = inconsolataFont
 		textLabel.Parent = billboard
 	
 		nameTagMap[player] = textLabel
